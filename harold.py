@@ -1,5 +1,5 @@
 """
-harold --  An asynchronous Discord bot that queries https://herald.playphoenix.online/.
+Harold -- An asynchronous Discord bot that parses HTML from https://herald.playphoenix.online/.
 """
 import logging
 import sys
@@ -7,14 +7,15 @@ import urllib
 
 import bs4
 import discord
-import pandas
 import requests
 
 import config
+import messages
+import models
+
+from callbacks import stats, rank
 
 from discord.ext import commands
-
-from utils import parse_amount_table, generate_amount_message
 
 logger = logging.getLogger("discord")
 logger.setLevel(logging.DEBUG)
@@ -60,7 +61,7 @@ HAROLD = commands.Bot(command_prefix="?", description=description)
 
 
 @HAROLD.command(description="Get statistics about characters.")
-async def character(name, table):
+async def character(ctx, name, table):
     """Get character statistics 
 
     Sample commands:
@@ -71,57 +72,34 @@ async def character(name, table):
             ?character `character` solos
             ?character `character` deaths
             ?character `character` irs
+            ?character `character` realm kills
+            ?character `character` rank
     """
-    if table not in ("rps", "deathblows", "deaths", "kills", "solos", "irs"):
-        await HAROLD.say("This table is not supported yet.")
-    else:
-        uri = urllib.parse.quote(
-            'herald.playphoenix.online/c/{name}/'.format(name=name)
+    if table not in config.SUPPORTED_TABLE_COMMANDS:
+        await ctx.send(f"🤖 - I can't find data for table: {table}.")
+
+    quoted = (
+        f"http://{urllib.parse.quote(f'herald.playphoenix.online/c/{name}/')}"
+    )
+    model = models.MODEL_MAP.get(table)
+    embed_message_model = messages.EMBED_MESSAGE_MAP.get(table)
+
+    callback = None
+    if table not in ("realm kills", "rank"):
+        callback = stats.CALLBACK_MAP.get(table)
+
+    response = model(callback)(quoted) if callback else model(None)(quoted)
+    if not response:
+        await ctx.send(
+            f"🤖 - Redirected to home. Check your character query: {name}."
         )
-        resp = requests.get("https://{uri}".format(uri=uri))
-        if resp.status_code == 502:
-            await HAROLD.say("The Herald is temporarily down. (502: Bad Gateway Error)")
-        else:
-            if table != "irs":
-                message_metadata = parse_amount_table(resp, name, table)
-                if isinstance(message_metadata, dict):
-                    embedded_message = generate_amount_message(
-                        **message_metadata)
-                    await HAROLD.say(embed=embedded_message)
-                elif not message_metadata:
-                    await HAROLD.say("That table doesn't exist.")
-            else:
-                rps = parse_amount_table(resp, guild, "rps")
-                deaths = parse_amount_table(resp, guild, "deaths")
-                if isinstance(rps, dict) and isinstance(deaths, dict):
-                    calculated_irs = []
-                    rvals = rps.get("values")
-                    dvals = deaths.get("values")
-                    for index in range(4):
-                        time_period = rvals[index][0]
-                        rpsf = float(rvals[index][1].replace(',', ''))
-                        deathsf = float(dvals[index][1].replace(',', ''))
-                        calculated_irs.append(
-                            tuple([
-                                time_period,
-                                rpsf if deathsf == 0 else "{0:.2f}".format(
-                                    rpsf / deathsf)
-                            ]
-                            )
-                        )
-                    embed = generate_amount_message(
-                        "https://www.youtube.com/watch?v=mG_k83Yiy1A",
-                        "Stats - {name} - I.R.S.".format(name=name),
-                        rps.get("footer"),
-                        "I Remain Standing",
-                        calculated_irs)
-                    await HAROLD.say(embed=embed)
-                else:
-                    await HAROLD.say("I.R.S. calculation not possible right now.")
+    else:
+        embed = embed_message_model(response)
+        await ctx.send(embed=embed)
 
 
 @HAROLD.command(description="Get statistics about guilds.")
-async def guild(guild, table):
+async def guild(ctx, guild, table):
     """Get guild statisitics.
 
         Sample Commands:
@@ -132,53 +110,68 @@ async def guild(guild, table):
             ?guild `guild` solos
             ?guild `guild` deaths
             ?guild `guild` irs
+            ?guild `guild` realm kills
+            ?guild `guild` rank
     """
-    if table not in ("rps", "deathblows", "deaths", "kills", "solos", "irs"):
-        await HAROLD.say("This table is not supported yet.")
-    else:
-        uri = urllib.parse.quote(
-            'herald.playphoenix.online/g/{guild}/'.format(guild=guild)
+    if table not in config.SUPPORTED_TABLE_COMMANDS:
+        await ctx.send(f"🤖 - I can't find data for table: {table}.")
+
+    quoted = (
+        f"http://{urllib.parse.quote(f'herald.playphoenix.online/g/{guild}/')}"
+    )
+    model = models.MODEL_MAP.get(table)
+    embed_message_model = messages.EMBED_MESSAGE_MAP.get(table)
+
+    callback = None
+    if table not in ("realm kills", "rank"):
+        callback = stats.CALLBACK_MAP.get(table)
+
+    response = model(callback)(quoted) if callback else model(None)(quoted)
+    if not response:
+        await ctx.send(
+            f"🤖 - Redirected to home. Check your character query: {guild}."
         )
-        resp = requests.get("https://{uri}".format(uri=uri))
-        if resp.status_code == 502:
-            await HAROLD.say("The Herald is temporarily down.")
-        else:
-            if table != "irs":
-                message_metadata = parse_amount_table(resp, guild, table)
-                if isinstance(message_metadata, dict):
-                    embedded_message = generate_amount_message(
-                        **message_metadata)
-                    await HAROLD.say(embed=embedded_message)
-                elif not message_metadata:
-                    await HAROLD.say("That table doesn't exist.")
-            else:
-                rps = parse_amount_table(resp, guild, "rps")
-                deaths = parse_amount_table(resp, guild, "deaths")
-                if isinstance(rps, dict) and isinstance(deaths, dict):
-                    calculated_irs = []
-                    rvals = rps.get("values")
-                    dvals = deaths.get("values")
-                    for index in range(4):
-                        time_period = rvals[index][0]
-                        rpsf = float(rvals[index][1].replace(',', ''))
-                        deathsf = float(dvals[index][1].replace(',', ''))
-                        calculated_irs.append(
-                            tuple([
-                                time_period,
-                                rpsf if deathsf == 0 else "{0:.2f}".format(
-                                    rpsf / deathsf)
-                            ]
-                            )
-                        )
-                    embed = generate_amount_message(
-                        "https://www.youtube.com/watch?v=mG_k83Yiy1A",
-                        "Stats - {guild} - I.R.S.".format(guild=guild),
-                        rps.get("footer"),
-                        "I Remain Standing",
-                        calculated_irs)
-                    await HAROLD.say(embed=embed)
-                else:
-                    await HAROLD.say("I.R.S. calculation not possible right now.")
+    embed = embed_message_model(response)
+    await ctx.send(embed=embed)
+
+
+@HAROLD.command(
+    description="Get rank of player or guild with respect to specific stats."
+)
+async def rank(ctx, name, table):
+    """Get guild statisitics.
+
+        Sample Commands:
+
+            ?guild `guild` rps
+            ?guild `guild` kills
+            ?guild `guild` deathblows
+            ?guild `guild` solos
+            ?guild `guild` deaths
+            ?guild `guild` irs
+            ?guild `guild` realm kills
+            ?guild `guild` rank
+    """
+    if table not in config.SUPPORTED_TABLE_COMMANDS:
+        await ctx.send(f"🤖 - I can't find data for table: {table}.")
+
+    quoted = (
+        f"http://{urllib.parse.quote(f'herald.playphoenix.online/g/{guild}/')}"
+    )
+    model = models.MODEL_MAP.get(table)
+    embed_message_model = messages.EMBED_MESSAGE_MAP.get(table)
+
+    callback = None
+    if table not in ("realm kills", "rank"):
+        callback = rank.CALLBACK_MAP.get(table)
+
+    response = model(callback)(quoted) if callback else model(None)(quoted)
+    if not response:
+        await ctx.send(
+            f"🤖 - Redirected to home. Check your character query: {guild}."
+        )
+    embed = embed_message_model(response)
+    await ctx.send(embed=embed)
 
 
 if __name__ == "__main__":

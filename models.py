@@ -1,5 +1,9 @@
 """
+Callable classes that are responsible for parsing the herald. The design
+was inspired by an article detailing a strict enforcement of the SRP.
 """
+import config
+
 import requests
 import mypy
 
@@ -24,7 +28,6 @@ class HeraldPageMetadata:
         3: "Last Week",
         4: "Last 48 Hours",
     }
-
     xpath_base_table = "/html/body/main/div[2]/div[{div}]/table[{table}]/"
     xpath_last_updated = "/html/body/aside/text()"
     character_description = "/html/body/main/div[1]/div"
@@ -40,12 +43,15 @@ class ParseAmount(HeraldPageMetadata):
             "Last Week": {},
             "Last 48 Hours": {},
             "Last Updated": "",
-            "Character Description": "",
+            "Description": "",
+            "URL": "",
         }
         self.callback = callback
 
     def __call__(self, endpoint: str) -> Union[dict, str]:
         response = requests.get(endpoint)
+        if response.url == config.FAILED_RESPONSE_REDIRECT:
+            return False
 
         if response.ok:
             soup = fromstring(response.text)
@@ -76,10 +82,12 @@ class ParseAmount(HeraldPageMetadata):
                 {
                     "Last Updated": " ".join(
                         " ".join(last_updated).replace("\n", "").split()
-                    ),
-                    "Character Description": " ".join(
+                    )
+                    + " (UTC)",
+                    "Description": " ".join(
                         character_description[0].text_content().split()
                     ),
+                    "URL": endpoint,
                 }
             )
 
@@ -101,12 +109,16 @@ class ParseRealmKills(HeraldPageMetadata):
             "Last Week": {},
             "Last 48 Hours": {},
             "Last Updated": "",
-            "Character Description": "",
+            "Description": "",
+            "URL": "",
         }
         self.callback = callback
 
     def __call__(self, endpoint: str) -> Union[dict, str]:
         response = requests.get(endpoint)
+        if response.url == config.FAILED_RESPONSE_REDIRECT:
+            return False
+
         if response.ok:
             soup = fromstring(response.text)
             for metric, xpath in self.xpath_table_map.items():
@@ -115,7 +127,10 @@ class ParseRealmKills(HeraldPageMetadata):
                     stats_column = (
                         f"{self.xpath_base_table.format(div=div, table=table)}"
                     )
-                    for column in range(2, 5):
+                    column_range = (
+                        range(2, 4) if "/g/" in endpoint else range(2, 5)
+                    )
+                    for column in column_range:
                         dimension_elements = soup.xpath(
                             f"{stats_column}/thead/tr/th[{column}]"
                         )
@@ -142,10 +157,12 @@ class ParseRealmKills(HeraldPageMetadata):
                 {
                     "Last Updated": " ".join(
                         " ".join(last_updated).replace("\n", "").split()
-                    ),
-                    "Character Description": " ".join(
+                    )
+                    + " (UTC)",
+                    "Description": " ".join(
                         character_description[0].text_content().split()
                     ),
+                    "URL": endpoint,
                 }
             )
         else:
@@ -166,12 +183,14 @@ class ParseRank(HeraldPageMetadata):
             "Last Week": {},
             "Last 48 Hours": {},
             "Last Updated": "",
-            "Character Description": "",
+            "Description": "",
         }
         self.callback = callback
 
     def __call__(self, endpoint: str) -> Union[dict, str]:
         response = requests.get(endpoint)
+        if response.url == config.FAILED_RESPONSE_REDIRECT:
+            return False
 
         if response.ok:
             soup = fromstring(response.text)
@@ -183,7 +202,10 @@ class ParseRank(HeraldPageMetadata):
                 stats_column = (
                     f"{self.xpath_base_table.format(div=div, table=table)}"
                 )
-                for column in range(3, 6):
+                column_range = (
+                    range(3, 5) if "/g/" in endpoint else range(3, 6)
+                )
+                for column in column_range:
                     dimension_elements = soup.xpath(
                         f"{stats_column}/thead/tr/th[{column}]"
                     )
@@ -210,9 +232,10 @@ class ParseRank(HeraldPageMetadata):
                     "Last Updated": " ".join(
                         " ".join(last_updated).replace("\n", "").split()
                     ),
-                    "Character Description": " ".join(
+                    "Description": " ".join(
                         character_description[0].text_content().split()
                     ),
+                    "URL": endpoint,
                 }
             )
         else:
@@ -223,3 +246,15 @@ class ParseRank(HeraldPageMetadata):
             return self.callback(self.response_structure)
 
         return self.response_structure
+
+
+MODEL_MAP = {
+    "rps": ParseAmount,
+    "deathblows": ParseAmount,
+    "deaths": ParseAmount,
+    "kills": ParseAmount,
+    "solos": ParseAmount,
+    "irs": ParseAmount,
+    "realm kills": ParseRealmKills,
+    "rank": ParseRank,
+}
