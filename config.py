@@ -26,10 +26,7 @@ SUPPORTED_TABLE_COMMANDS = (
     "kills",
     "solos",
     "irs",
-    "rank",
-    "realm kills",
-    "rank",
 )
 
-FAILED_RESPONSE_REDIRECT = "https://herald.playphoenix.online"
+FAILED_RESPONSE_REDIRECT = "https://herald.playphoenix.online/"
 TOKEN = ""

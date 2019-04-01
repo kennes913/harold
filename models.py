@@ -12,7 +12,7 @@ from typing import Callable, Union
 from urllib.parse import quote
 
 
-class HeraldPageMetadata:
+class PageMetadata:
 
     xpath_table_map = {
         "Realm Points": (1, 1),
@@ -33,7 +33,7 @@ class HeraldPageMetadata:
     character_description = "/html/body/main/div[1]/div"
 
 
-class ParseAmount(HeraldPageMetadata):
+class GetAmounts(PageMetadata):
     def __init__(
         self, callback: Union[None, Callable[[dict], dict]] = None
     ) -> None:
@@ -49,9 +49,22 @@ class ParseAmount(HeraldPageMetadata):
         self.callback = callback
 
     def __call__(self, endpoint: str) -> Union[dict, str]:
+        """HTTP GET `endpoint` and extract statistics realm points,
+        deaths, deathblows, kills and solo kills from table.
+
+        Arguments:
+        endpoint :: str 
+            The URL
+        
+        Example:
+        
+        realm_kills = models.GetRealmKills('https://herald.playphoenix.online/c/Debug')
+        """
         response = requests.get(endpoint)
         if response.url == config.FAILED_RESPONSE_REDIRECT:
             return False
+
+        print(response.url)
 
         if response.ok:
             soup = fromstring(response.text)
@@ -77,20 +90,26 @@ class ParseAmount(HeraldPageMetadata):
                         }
                     )
             last_updated = soup.xpath(self.xpath_last_updated)
-            character_description = soup.xpath(self.character_description)
+
+            # The character description feels too procedural. There's a better
+            # way to do this with an isolated function.
+            chracter_data = soup.xpath(self.character_description)
+            character_description = " ".join(
+                chracter_data[0].text_content().split()
+            )
+            character_description = character_description.replace("> ", " - ")
+            character_description = character_description.replace(" <", " - ")
+
             self.response_structure.update(
                 {
                     "Last Updated": " ".join(
                         " ".join(last_updated).replace("\n", "").split()
                     )
                     + " (UTC)",
-                    "Description": " ".join(
-                        character_description[0].text_content().split()
-                    ),
+                    "Description": character_description,
                     "URL": endpoint,
                 }
             )
-
         else:
             return (
                 f"There is an issue with the Herald ({response.status_code})."
@@ -101,8 +120,10 @@ class ParseAmount(HeraldPageMetadata):
         return self.response_structure
 
 
-class ParseRealmKills(HeraldPageMetadata):
-    def __init__(self, callback: Union[None, Callable[[dict], dict]]) -> None:
+class GetRealmKills(PageMetadata):
+    def __init__(
+        self, callback: Union[None, Callable[[dict], dict]] = None
+    ) -> None:
         self.response_structure = {
             "All Time": {},
             "This Week": {},
@@ -115,6 +136,17 @@ class ParseRealmKills(HeraldPageMetadata):
         self.callback = callback
 
     def __call__(self, endpoint: str) -> Union[dict, str]:
+        """HTTP GET `endpoint` and extract amount of realm 
+        kills from table.
+
+        Arguments:
+        endpoint :: str 
+            The URL
+        
+        Example:
+        
+        realm_kills = models.GetRealmKills('https://herald.playphoenix.online/c/Debug')
+        """
         response = requests.get(endpoint)
         if response.url == config.FAILED_RESPONSE_REDIRECT:
             return False
@@ -152,16 +184,23 @@ class ParseRealmKills(HeraldPageMetadata):
                                 }
                             )
             last_updated = soup.xpath(self.xpath_last_updated)
-            character_description = soup.xpath(self.character_description)
+
+            # The character description feels too procedural. There's a better
+            # way to do this with an isolated function.
+            chracter_data = soup.xpath(self.character_description)
+            character_description = " ".join(
+                chracter_data[0].text_content().split()
+            )
+            character_description = character_description.replace("> ", " - ")
+            character_description = character_description.replace(" <", " - ")
+
             self.response_structure.update(
                 {
                     "Last Updated": " ".join(
                         " ".join(last_updated).replace("\n", "").split()
                     )
                     + " (UTC)",
-                    "Description": " ".join(
-                        character_description[0].text_content().split()
-                    ),
+                    "Description": character_description,
                     "URL": endpoint,
                 }
             )
@@ -175,8 +214,10 @@ class ParseRealmKills(HeraldPageMetadata):
         return self.response_structure
 
 
-class ParseRank(HeraldPageMetadata):
-    def __init__(self, callback: Union[None, Callable[[dict], dict]]) -> None:
+class GetRanks(PageMetadata):
+    def __init__(
+        self, callback: Union[None, Callable[[dict], dict]] = None
+    ) -> None:
         self.response_structure = {
             "All Time": {},
             "This Week": {},
@@ -188,16 +229,29 @@ class ParseRank(HeraldPageMetadata):
         self.callback = callback
 
     def __call__(self, endpoint: str) -> Union[dict, str]:
+        """HTTP GET `endpoint` and extract rank statistics for realm points,
+        deaths, deathblows, kills and solo kills from table.
+
+        Arguments:
+        endpoint :: str 
+            The URL
+        
+        Example:
+        
+        realm_kills = models.GetRanks('https://herald.playphoenix.online/c/Debug')
+        """
         response = requests.get(endpoint)
         if response.url == config.FAILED_RESPONSE_REDIRECT:
             return False
 
         if response.ok:
             soup = fromstring(response.text)
+
             for metric, xpath in self.xpath_table_map.items():
+
                 if metric == "Realm Kills":
                     continue
-                metric_ranking = {}
+
                 div, table = xpath
                 stats_column = (
                     f"{self.xpath_base_table.format(div=div, table=table)}"
@@ -205,18 +259,24 @@ class ParseRank(HeraldPageMetadata):
                 column_range = (
                     range(3, 5) if "/g/" in endpoint else range(3, 6)
                 )
+
                 for column in column_range:
+
                     dimension_elements = soup.xpath(
                         f"{stats_column}/thead/tr/th[{column}]"
                     )
                     measurement = dimension_elements[0].text_content()
+
                     for row in range(1, 5):
+
                         element = soup.xpath(
                             f"{stats_column}/tbody/tr[{row}]/td[{column}]"
                         )
+
                         insert = self.response_structure.get(
                             self.xpath_time_period_map.get(row)
                         )
+                        metric_ranking = insert.setdefault(metric, {})
                         metric_ranking.update(
                             {
                                 measurement: int(
@@ -224,17 +284,24 @@ class ParseRank(HeraldPageMetadata):
                                 )
                             }
                         )
-                        insert.update({metric: metric_ranking})
             last_updated = soup.xpath(self.xpath_last_updated)
-            character_description = soup.xpath(self.character_description)
+
+            # The character description feels too procedural. There's a better
+            # way to do this with an isolated function.
+            chracter_data = soup.xpath(self.character_description)
+            character_description = " ".join(
+                chracter_data[0].text_content().split()
+            )
+            character_description = character_description.replace("> ", " - ")
+            character_description = character_description.replace(" <", " - ")
+
             self.response_structure.update(
                 {
                     "Last Updated": " ".join(
                         " ".join(last_updated).replace("\n", "").split()
-                    ),
-                    "Description": " ".join(
-                        character_description[0].text_content().split()
-                    ),
+                    )
+                    + " (UTC)",
+                    "Description": character_description,
                     "URL": endpoint,
                 }
             )
@@ -249,12 +316,12 @@ class ParseRank(HeraldPageMetadata):
 
 
 MODEL_MAP = {
-    "rps": ParseAmount,
-    "deathblows": ParseAmount,
-    "deaths": ParseAmount,
-    "kills": ParseAmount,
-    "solos": ParseAmount,
-    "irs": ParseAmount,
-    "realm kills": ParseRealmKills,
-    "rank": ParseRank,
+    "rps": GetAmounts,
+    "deathblows": GetAmounts,
+    "deaths": GetAmounts,
+    "kills": GetAmounts,
+    "solos": GetAmounts,
+    "irs": GetAmounts,
+    "realm kills": GetRealmKills,
+    "rank": GetRanks,
 }

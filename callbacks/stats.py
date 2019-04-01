@@ -1,6 +1,7 @@
 """
 Callback functions to be passed to the models callables. (Refactor into decorator pattern.)
 """
+import functools
 
 
 def get_realm_points_per_death(response: dict) -> dict:

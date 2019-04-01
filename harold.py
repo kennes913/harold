@@ -13,7 +13,7 @@ import config
 import messages
 import models
 
-from callbacks import stats, rank
+from callbacks import stats, rank_server, rank_realm, realm_kills
 
 from discord.ext import commands
 
@@ -35,48 +35,41 @@ logger.addHandler(stream_handler)
 
 
 description = """
-    Get player and guild stats from https://herald.playphoenix.online/
 
-    Currently supported commands:
+        __  __                 __    __
+       / / / /___ __________  / /___/ /
+      / /_/ / __ `/ ___/ __ \/ / __  / 
+     / __  / /_/ / /  / /_/ / / /_/ /  
+    /_/ /_/\__,_/_/   \____/_/\__,_/   
+    
 
-        Character Stats:
+Get player and guild statistics, ranks and realm kills from https://herald.playphoenix.online/.
 
-            ?character `character` rps
-            ?character `character` kills
-            ?character `character` deathblows
-            ?character `character` solos
-            ?character `character` deaths
-            ?character `character` irs
-        
-        Guild Stats:
-
-            ?guild `guild` rps
-            ?guild `guild` kills
-            ?guild `guild` deathblows
-            ?guild `guild` solos
-            ?guild `guild` deaths
-            ?guild `guild` irs
 """
 HAROLD = commands.Bot(command_prefix="?", description=description)
 
 
-@HAROLD.command(description="Get statistics about characters.")
+@HAROLD.command(escription="Get statistics about characters.")
 async def character(ctx, name, table):
-    """Get character statistics 
+    """Get character statistics.
 
-    Sample commands:
+    Arguments:
 
-            ?character `character` rps
-            ?character `character` kills
-            ?character `character` deathblows
-            ?character `character` solos
-            ?character `character` deaths
-            ?character `character` irs
-            ?character `character` realm kills
-            ?character `character` rank
+        name :: The name of the character
+        table :: The name of the metric you want to query. 
+
+    Examples:
+        
+        ?character Debug rps
+        ?character Debug kills
+        ?character Debug deathblows
+        ?character Debug solos
+        ?character Debug deaths
+        ?character Debug irs
+
     """
     if table not in config.SUPPORTED_TABLE_COMMANDS:
-        await ctx.send(f"🤖 - I can't find data for table: {table}.")
+        await ctx.send(f"⚠️ I can't find data for table: {table}.")
 
     quoted = (
         f"http://{urllib.parse.quote(f'herald.playphoenix.online/c/{name}/')}"
@@ -91,7 +84,7 @@ async def character(ctx, name, table):
     response = model(callback)(quoted) if callback else model(None)(quoted)
     if not response:
         await ctx.send(
-            f"🤖 - Redirected to home. Check your character query: {name}."
+            f"⚠️ Redirected to {config.FAILED_RESPONSE_REDIRECT}. Check your character query. Is '{name}' a character name?"
         )
     else:
         embed = embed_message_model(response)
@@ -102,19 +95,22 @@ async def character(ctx, name, table):
 async def guild(ctx, guild, table):
     """Get guild statisitics.
 
-        Sample Commands:
+    Arguments:
 
-            ?guild `guild` rps
-            ?guild `guild` kills
-            ?guild `guild` deathblows
-            ?guild `guild` solos
-            ?guild `guild` deaths
-            ?guild `guild` irs
-            ?guild `guild` realm kills
-            ?guild `guild` rank
+        guild :: The name of the character
+        table :: The name of the metric you want to query. 
+
+    Examples:
+
+            ?guild 'Swipe Right' rps
+            ?guild 'Swipe Right' kills
+            ?guild 'Swipe Right' deathblows
+            ?guild 'Swipe Right' solos
+            ?guild 'Swipe Right' deaths
+            ?guild 'Swipe Right' irs
     """
     if table not in config.SUPPORTED_TABLE_COMMANDS:
-        await ctx.send(f"🤖 - I can't find data for table: {table}.")
+        await ctx.send(f"⚠️ I can't find data for table: {table}.")
 
     quoted = (
         f"http://{urllib.parse.quote(f'herald.playphoenix.online/g/{guild}/')}"
@@ -129,46 +125,91 @@ async def guild(ctx, guild, table):
     response = model(callback)(quoted) if callback else model(None)(quoted)
     if not response:
         await ctx.send(
-            f"🤖 - Redirected to home. Check your character query: {guild}."
+            f"⚠️ Redirected to {config.FAILED_RESPONSE_REDIRECT}. Check your guild query. Is '{guild}' a guild name?"
         )
     embed = embed_message_model(response)
     await ctx.send(embed=embed)
 
 
-@HAROLD.command(
-    description="Get rank of player or guild with respect to specific stats."
-)
-async def rank(ctx, name, table):
-    """Get guild statisitics.
+@HAROLD.command(description="Get ranks for character or guilds.")
+async def rank(ctx, entity, name, table, comparison):
+    """Get ranks for specific stats relative to the server or the realm.
 
-        Sample Commands:
+    Arguments:
 
-            ?guild `guild` rps
-            ?guild `guild` kills
-            ?guild `guild` deathblows
-            ?guild `guild` solos
-            ?guild `guild` deaths
-            ?guild `guild` irs
-            ?guild `guild` realm kills
-            ?guild `guild` rank
+        entity :: The name of the character or guild.
+        name :: The name of the metric you want to query. 
+        table :: The name of the metric you want to query. 
+        comparison :: The set of things you're ranking.
+
+
+    Examples:
+
+        ?rank guild|character `character`|`guild` rps server|realm
+        ?rank guild|character `character`|`guild` kills server|realm
+        ?rank guild|character `character`|`guild` deathblows server|realm
+        ?rank guild|character `character`|`guild` solos server|realm
+        ?rank guild|character `character`|`guild` deaths server|realm
+
     """
-    if table not in config.SUPPORTED_TABLE_COMMANDS:
-        await ctx.send(f"🤖 - I can't find data for table: {table}.")
+    if entity not in ("character", "guild"):
+        await ctx.send(f"⚠️ You can only get ranks for characters or guilds.")
 
-    quoted = (
-        f"http://{urllib.parse.quote(f'herald.playphoenix.online/g/{guild}/')}"
-    )
-    model = models.MODEL_MAP.get(table)
+    if comparison not in ("server", "realm"):
+        await ctx.send(
+            f"⚠️ You can only get ranks relative to realm or server."
+        )
+    if table not in config.SUPPORTED_TABLE_COMMANDS:
+        await ctx.send(f"⚠️ I can't find data for table: {table}.")
+
+    entity = "c" if entity == "character" else "g"
+    quoted = f"http://{urllib.parse.quote(f'herald.playphoenix.online/{entity}/{name}/')}"
+    model = models.MODEL_MAP.get("rank")
     embed_message_model = messages.EMBED_MESSAGE_MAP.get(table)
 
-    callback = None
-    if table not in ("realm kills", "rank"):
-        callback = rank.CALLBACK_MAP.get(table)
-
-    response = model(callback)(quoted) if callback else model(None)(quoted)
+    callback = rank_realm.CALLBACK_MAP.get(table)
+    response = model(callback)(quoted)
     if not response:
         await ctx.send(
-            f"🤖 - Redirected to home. Check your character query: {guild}."
+            f"⚠️ Redirected to {config.FAILED_RESPONSE_REDIRECT}. Check your query."
+        )
+    embed = embed_message_model(response)
+    await ctx.send(embed=embed)
+
+
+@HAROLD.command(description="Get kills for each realm.")
+async def realm(ctx, entity, name, realm):
+    """Get the realm breakdown of havoc and death that has been wrought.
+
+    Arguments:
+
+        entity :: Character or guild.
+        name :: The name of the character or guild.
+        realm :: Albion, Midgard or Hibernia
+
+    Sample Commands:
+
+        ?realm character Debug albion
+        ?realm guild 'Swipe Right' midgard    
+    """
+    if entity not in ("character", "guild"):
+        await ctx.send(f"⚠️ You can only get ranks for characters or guilds.")
+
+    if realm.lower() not in ("albion", "midgard", "hibernia"):
+        await ctx.send(
+            f"⚠️ There are only 3 realms: Hibernia, Midgard, Albion."
+        )
+    entity = "c" if entity == "character" else "g"
+    quoted = f"http://{urllib.parse.quote(f'herald.playphoenix.online/{entity}/{name}/')}"
+    model = models.MODEL_MAP.get("realm kills")
+    embed_message_model = messages.EMBED_MESSAGE_MAP.get("realm kills")
+
+    callback = realm_kills.CALLBACK_MAP.get(realm)
+    response = model(callback)(quoted) if callback else model(None)(quoted)
+
+    if not response:
+        await ctx.send(
+            f"⚠️ Redirected to {config.FAILED_RESPONSE_REDIRECT}. Check your query."
         )
     embed = embed_message_model(response)
     await ctx.send(embed=embed)
