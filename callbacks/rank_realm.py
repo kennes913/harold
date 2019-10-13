@@ -1,9 +1,9 @@
 """
 """
-from callbacks.decorators import comparison
+from callbacks.decorators import rank
 
 
-@comparison("realm")
+@rank("realm")
 def get_realm_points(response: dict) -> dict:
     """Get realm points for a particular guild or character."""
     resp = {}
@@ -22,7 +22,7 @@ def get_realm_points(response: dict) -> dict:
     return resp
 
 
-@comparison("realm")
+@rank("realm")
 def get_deaths(response: dict) -> dict:
     """Get deaths for a particular guild or character."""
     resp = {}
@@ -41,7 +41,7 @@ def get_deaths(response: dict) -> dict:
     return resp
 
 
-@comparison("realm")
+@rank("realm")
 def get_deathblows(response: dict) -> dict:
     """Get deathblows for a particular guild or character."""
     resp = {}
@@ -60,7 +60,7 @@ def get_deathblows(response: dict) -> dict:
     return resp
 
 
-@comparison("realm")
+@rank("realm")
 def get_kills(response: dict) -> dict:
     """Get kills for a particular guild or character."""
     resp = {}
@@ -79,7 +79,7 @@ def get_kills(response: dict) -> dict:
     return resp
 
 
-@comparison("realm")
+@rank("realm")
 def get_solo_kills(response: dict) -> dict:
     """Calculate solo kills for a particular guild or character."""
     resp = {}

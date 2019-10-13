@@ -1,41 +1,28 @@
- # Harold #
+        __  __                 __    __
+       / / / /___ __________  / /___/ /
+      / /_/ / __ `/ ___/ __ \/ / __  / 
+     / __  / /_/ / /  / /_/ / / /_/ /  
+    /_/ /_/\__,_/_/   \____/_/\__,_/   
+    
 
- A Discord bot designed to query simple guild and character st atistics located at the [Phoenix Freeshard Herald](https://herald.playphoenix.online/).
+ A Discord bot built using that queries guild and character statistics and rankings for those statistics from data at the [Phoenix Freeshard Herald](https://herald.playphoenix.online/).
 
 ## Requirements ##
 
-Coming soon.
+- Linux Host
+- Python 3.7
+- Discord Account with Administrator Privileges on target server
+
 
 ## Deployment ##
-
-Coming soon.
+```
+pip install -r requirements.txt
+pip install -U git+https://github.com/Rapptz/discord.py@rewrite
+```
 
 ## Commands ##
 
-```
-Get player and guild stats from https://herald.playphoenix.online/
-
-Currently supported commands:
-
-    Character Stats:
-
-        ?character `character` rps
-        ?character `character` kills
-        ?character `character` deathblows
-        ?character `character` solos
-        ?character `character` deaths
-        ?character `character` irs
-    
-    Guild Stats:
-
-        ?guild `guild` rps
-        ?guild `guild` kills
-        ?guild `guild` deathblows
-        ?guild `guild` solos
-        ?guild `guild` deaths
-        ?guild `guild` irs
-```
-
+Coming Soon.
 
 
 
